@@ -109,13 +109,15 @@ footer a{color:var(--accent)}
 <textarea id="iqAns" style="min-height:100px" placeholder="Answer the way you would say it to a visitor..."></textarea>
 <div class="bar"><button type="button" id="iqNext">Save and next</button><button type="button" class="ghost" id="iqSkip">Skip</button><button type="button" class="ghost" id="iqStop">Finish</button></div>
 </div>
-<h3>Answer database</h3>
+<button type="button" id="dbHead" class="entryHead" style="flex-direction:row;align-items:center;gap:8px;padding:8px 4px"><span class="chev" id="dbChev"></span><span style="font-weight:600">Answer database</span><span class="chip" id="dbCount"></span></button>
+<div id="dbBody" class="hide" style="display:flex;flex-direction:column;gap:12px">
 <div class="bar"><input type="search" id="qaSearch" placeholder="Search questions, answers, categories..." style="flex:1;min-width:160px"><select id="qaTag"></select><select id="qaSort"><option value="new">Newest first</option><option value="old">Oldest first</option><option value="az">Question A to Z</option><option value="tag">Category</option></select></div>
 <div class="bar" style="align-items:center"><span id="qaCount" class="meta" style="flex:1"></span><button type="button" class="ghost" id="qaExpand">Expand all</button><button type="button" class="ghost" id="qaCollapse">Collapse all</button></div>
 <div id="qaList" style="display:flex;flex-direction:column;gap:8px"></div>
 <datalist id="tagList"></datalist>
 <input type="file" id="qaFile" accept=".json,.csv" class="hide">
 <div class="bar"><button type="button" class="ghost" id="addQa">Add entry</button><button type="button" class="ghost" id="importBtn">Import</button><button type="button" class="ghost" id="exportBtn">Export JSON</button><button type="button" class="ghost" id="exportCsv">Export CSV</button></div>
+</div>
 <div class="bar"><button type="button" id="saveBtn">Save to GitHub</button><button type="button" class="ghost" id="closeBtn2">Close</button><button type="button" class="danger" id="logoutBtn">Log out</button></div>
 </div>
 <div id="adminMsg"></div>
@@ -601,6 +603,7 @@ function buildRow(r) {
 function updateCount() {
   const n = visibleRecords().length;
   const filtered = view.search.trim() || view.tag;
+  $("dbCount").textContent = db.length;
   $("qaCount").textContent = (filtered ? "Showing " + n + " of " + db.length : db.length + " entr" + (db.length === 1 ? "y" : "ies")) + " · " + openIds.size + " open";
 }
 
@@ -619,13 +622,23 @@ function renderList() {
   updateCount();
 }
 
-function addQaRow(q, a, tag) {
+function setDbOpen(v) {
+  $("dbBody").classList.toggle("hide", !v);
+  $("dbChev").textContent = v ? "▾" : "▸";
+}
+
+function addQaRow(q, a, tag, quiet) {
   const rec = normalize({ q: q, a: a, tag: tag, updated: new Date().toISOString() });
   db.push(rec);
+  if (quiet) {
+    renderList();
+    return null;
+  }
   view.search = "";
   view.tag = "";
   $("qaSearch").value = "";
   openIds.add(rec.id);
+  setDbOpen(true);
   renderList();
   const row = $("qaList").querySelector('[data-id="' + rec.id + '"]');
   if (row) row.scrollIntoView({ block: "nearest" });
@@ -642,6 +655,7 @@ function fillEditor() {
   view.sort = "new";
   $("qaSearch").value = "";
   $("qaSort").value = "new";
+  setDbOpen(false);
   renderList();
 }
 
@@ -847,7 +861,7 @@ $("interviewBtn").addEventListener("click", interviewStart);
 $("iqNext").addEventListener("click", () => {
   const a = $("iqAns").value.trim();
   if (!a) return msg("Type an answer or press Skip.");
-  addQaRow(iq.list[iq.i], a, "Interview");
+  addQaRow(iq.list[iq.i], a, "Interview", true);
   iq.added++;
   iq.i++;
   msg("");
@@ -874,6 +888,7 @@ $("logoutBtn").addEventListener("click", () => {
   msg("Logged out.");
   status.textContent = "";
 });
+$("dbHead").addEventListener("click", () => setDbOpen($("dbBody").classList.contains("hide")));
 $("addQa").addEventListener("click", () => {
   const row = addQaRow("", "", "");
   if (row) row.querySelector("input").focus();

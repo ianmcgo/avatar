@@ -47,3 +47,7 @@ A single `index.html` for GitHub Pages. It shows an avatar of Ian and a chat box
 - Import accepts JSON (a list of entries, or a full knowledge file) or CSV with question and answer columns and an optional category column. Questions already in the database are skipped. Export gives JSON or CSV.
 - Interview answers are tagged "Interview" and answers added with "Teach a better answer" are tagged "Taught".
 - If the database ever outgrows a single JSON file or needs several editors at once, move the records to a hosted database such as Supabase and keep this panel as the front end.
+
+## Foldable database section
+- The whole "Answer database" section in the admin panel folds under one header that shows the entry count. It starts collapsed. Adding an entry or using "Teach a better answer" opens it automatically; interview answers are added without opening it.
+- The Save to GitHub and Close buttons stay outside the fold so they are always visible.
