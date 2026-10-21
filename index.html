@@ -66,7 +66,6 @@ footer a{color:var(--accent)}
 <h1 id="name"></h1>
 <div id="tools">
 <label><input type="checkbox" id="speak" style="flex:none"> Speak replies</label>
-<select id="voiceSel" style="background:var(--panel);color:var(--text);border:1px solid #2c3257;border-radius:8px;padding:4px;max-width:200px"></select>
 </div>
 <button type="button" id="smart" style="display:none">Enable smart mode (700 MB download)</button>
 <div id="status"></div>
@@ -212,8 +211,6 @@ function addTeach(d) {
 
 const MALE_HINTS = ["male", "david", "mark", "daniel", "alex", "fred", "guy", "james", "george", "richard", "ryan", "thomas", "oliver", "arthur", "gordon", "aaron", "rishi", "liam", "eric", "christopher", "roger", "steffan", "brian", "davis", "tony", "jason"];
 const FEMALE_HINTS = ["female", "zira", "samantha", "victoria", "karen", "susan", "hazel", "aria", "jenny", "emma", "sara", "linda", "moira", "tessa", "fiona", "allison", "ava", "joanna", "kimberly", "salli", "amy", "libby", "sonia", "michelle", "monica"];
-const VOICE_KEY = "avatar_voice";
-let voices = [];
 let voice = null;
 
 function isMale(v) {
@@ -224,35 +221,14 @@ function isMale(v) {
 
 function pickVoice() {
   if (!("speechSynthesis" in window)) return;
-  voices = speechSynthesis.getVoices().filter(v => v.lang.toLowerCase().startsWith("en"));
-  if (!voices.length) return;
-  let saved = null;
-  try { saved = localStorage.getItem(VOICE_KEY); } catch (e) {}
-  voice = voices.find(v => v.name === saved) || voices.find(isMale) || voices[0];
-  const sel = $("voiceSel");
-  sel.innerHTML = "";
-  voices.forEach(v => {
-    const o = document.createElement("option");
-    o.value = v.name;
-    o.textContent = v.name + (isMale(v) ? " (male)" : "");
-    if (v === voice) o.selected = true;
-    sel.appendChild(o);
-  });
+  const en = speechSynthesis.getVoices().filter(v => v.lang.toLowerCase().startsWith("en"));
+  if (!en.length) return;
+  voice = en.find(isMale) || en[0];
 }
 
 if ("speechSynthesis" in window) {
   pickVoice();
   speechSynthesis.onvoiceschanged = pickVoice;
-  $("voiceSel").addEventListener("change", e => {
-    voice = voices.find(v => v.name === e.target.value) || voice;
-    try { localStorage.setItem(VOICE_KEY, e.target.value); } catch (err) {}
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance("This is my voice.");
-    if (voice) u.voice = voice;
-    speechSynthesis.speak(u);
-  });
-} else {
-  $("voiceSel").style.display = "none";
 }
 
 function speak(text) {
