@@ -20,7 +20,7 @@ A single `index.html` for GitHub Pages. It shows an avatar of Ian and a chat box
 
 ## Avatar
 - Cartoon SVG with a mouth that animates while the avatar is replying or speaking.
-- "Speak replies" uses the browser's built-in speech synthesis. It automatically picks a male English voice by matching known male voice names, with no visitor choice, and lowers the pitch if only a non-male voice exists. Available voices depend on the visitor\'s device, and browsers do not report voice gender, so name matching is a best guess. For your own cloned voice, generate audio from a service like ElevenLabs on the server side and play it in the page.
+- "Speak replies" uses the browser's built-in speech synthesis. It automatically picks a male English voice by matching known male voice names, with no visitor choice, and lowers the pitch if only a non-male voice exists. Available voices depend on the visitor's device, and browsers do not report voice gender, so name matching is a best guess. For your own cloned voice, generate audio from a service like ElevenLabs on the server side and play it in the page.
 - Lip-synced video avatars (HeyGen, Synthesia) need a server or paid API and are not possible in a pure static page.
 
 ## Deploy
