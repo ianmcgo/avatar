@@ -48,6 +48,17 @@ footer a{color:var(--accent)}
 .danger{background:#8a3b3b}
 .teach{margin-top:6px;background:var(--me);color:var(--muted);font-size:12px;padding:3px 8px;border-radius:8px}
 #adminMsg{font-size:13px;color:var(--muted);min-height:18px}
+#adminBox input[type=search],#adminBox select{padding:9px;border-radius:10px;border:1px solid #2c3257;background:var(--bg);color:var(--text);font:inherit;font-size:14px}
+#adminBox input[type=search]{width:auto}
+.entry{padding:8px 10px;gap:8px}
+.entryHead{display:flex;flex-direction:column;gap:2px;width:100%;background:none;color:var(--text);text-align:left;padding:2px;font-size:14px;border-radius:8px}
+.entryTop{display:flex;gap:8px;align-items:center;width:100%;min-width:0}
+.entryQ{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.entryA{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-left:20px;font-size:13px}
+.chev{width:12px;color:var(--muted);flex:none}
+.chip{background:var(--me);border-radius:999px;padding:1px 8px;font-size:11px;color:var(--muted);white-space:nowrap;flex:none}
+.entryBody{display:flex;flex-direction:column;gap:6px}
+.meta{font-size:12px;color:var(--muted)}
 .hide{display:none!important}
 </style>
 </head>
@@ -98,10 +109,14 @@ footer a{color:var(--accent)}
 <textarea id="iqAns" style="min-height:100px" placeholder="Answer the way you would say it to a visitor..."></textarea>
 <div class="bar"><button type="button" id="iqNext">Save and next</button><button type="button" class="ghost" id="iqSkip">Skip</button><button type="button" class="ghost" id="iqStop">Finish</button></div>
 </div>
-<h3>Questions and answers</h3>
-<div id="qaList" style="display:flex;flex-direction:column;gap:10px"></div>
-<div class="bar"><button type="button" class="ghost" id="addQa">Add Q&amp;A</button></div>
-<div class="bar"><button type="button" id="saveBtn">Save to GitHub</button><button type="button" class="ghost" id="exportBtn">Export JSON</button><button type="button" class="ghost" id="closeBtn2">Close</button><button type="button" class="danger" id="logoutBtn">Log out</button></div>
+<h3>Answer database</h3>
+<div class="bar"><input type="search" id="qaSearch" placeholder="Search questions, answers, categories..." style="flex:1;min-width:160px"><select id="qaTag"></select><select id="qaSort"><option value="new">Newest first</option><option value="old">Oldest first</option><option value="az">Question A to Z</option><option value="tag">Category</option></select></div>
+<div class="bar" style="align-items:center"><span id="qaCount" class="meta" style="flex:1"></span><button type="button" class="ghost" id="qaExpand">Expand all</button><button type="button" class="ghost" id="qaCollapse">Collapse all</button></div>
+<div id="qaList" style="display:flex;flex-direction:column;gap:8px"></div>
+<datalist id="tagList"></datalist>
+<input type="file" id="qaFile" accept=".json,.csv" class="hide">
+<div class="bar"><button type="button" class="ghost" id="addQa">Add entry</button><button type="button" class="ghost" id="importBtn">Import</button><button type="button" class="ghost" id="exportBtn">Export JSON</button><button type="button" class="ghost" id="exportCsv">Export CSV</button></div>
+<div class="bar"><button type="button" id="saveBtn">Save to GitHub</button><button type="button" class="ghost" id="closeBtn2">Close</button><button type="button" class="danger" id="logoutBtn">Log out</button></div>
 </div>
 <div id="adminMsg"></div>
 </div>
@@ -285,8 +300,8 @@ function addTeach(d) {
   b.textContent = "Teach a better answer";
   b.onclick = () => {
     openAdmin();
-    addQaRow(d.dataset.q, d.firstChild.textContent);
-    $("qaList").lastChild.querySelector("textarea").focus();
+    const row = addQaRow(d.dataset.q, d.firstChild.textContent, "Taught");
+    if (row) row.querySelector("textarea").focus();
   };
   d.appendChild(document.createElement("br"));
   d.appendChild(b);
@@ -438,41 +453,255 @@ function showViews() {
   $("editView").classList.toggle("hide", !loggedIn);
 }
 
-function addQaRow(q, a) {
+let db = [];
+const openIds = new Set();
+const view = { search: "", tag: "", sort: "new" };
+
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+function normalize(x) {
+  return {
+    id: x.id || uid(),
+    q: String(x.q || ""),
+    a: String(x.a || ""),
+    tag: String(x.tag || ""),
+    updated: x.updated || ""
+  };
+}
+
+function visibleRecords() {
+  const t = view.search.toLowerCase().trim();
+  const idx = new Map(db.map((r, i) => [r.id, i]));
+  const list = db.filter(r => (!view.tag || r.tag === view.tag) && (!t || (r.q + " " + r.a + " " + r.tag).toLowerCase().includes(t)));
+  const newer = (x, y) => (y.updated || "").localeCompare(x.updated || "") || idx.get(y.id) - idx.get(x.id);
+  if (view.sort === "new") list.sort(newer);
+  else if (view.sort === "old") list.sort((x, y) => newer(y, x));
+  else if (view.sort === "az") list.sort((x, y) => x.q.localeCompare(y.q));
+  else list.sort((x, y) => x.tag.localeCompare(y.tag) || x.q.localeCompare(y.q));
+  return list;
+}
+
+function refreshTags() {
+  const tags = Array.from(new Set(db.map(r => r.tag).filter(Boolean))).sort();
+  const sel = $("qaTag");
+  sel.innerHTML = "";
+  const all = document.createElement("option");
+  all.value = "";
+  all.textContent = "All categories";
+  sel.appendChild(all);
+  tags.forEach(t => {
+    const o = document.createElement("option");
+    o.value = t;
+    o.textContent = t;
+    sel.appendChild(o);
+  });
+  if (view.tag && !tags.includes(view.tag)) view.tag = "";
+  sel.value = view.tag;
+  const dl = $("tagList");
+  dl.innerHTML = "";
+  tags.forEach(t => {
+    const o = document.createElement("option");
+    o.value = t;
+    dl.appendChild(o);
+  });
+}
+
+function fmtDate(iso) {
+  return iso ? new Date(iso).toLocaleDateString() : "no date";
+}
+
+function buildRow(r) {
   const row = document.createElement("div");
-  row.className = "row";
+  row.className = "row entry";
+  row.dataset.id = r.id;
+
+  const head = document.createElement("button");
+  head.type = "button";
+  head.className = "entryHead";
+  const top = document.createElement("div");
+  top.className = "entryTop";
+  const chev = document.createElement("span");
+  chev.className = "chev";
+  const qs = document.createElement("span");
+  qs.className = "entryQ";
+  const chip = document.createElement("span");
+  chip.className = "chip";
+  top.append(chev, qs, chip);
+  const as = document.createElement("div");
+  as.className = "entryA";
+  head.append(top, as);
+
+  const body = document.createElement("div");
+  body.className = "entryBody";
   const qi = document.createElement("input");
   qi.type = "text";
   qi.placeholder = "Question";
-  qi.value = q || "";
+  qi.value = r.q;
   const ai = document.createElement("textarea");
   ai.placeholder = "Answer, in your voice";
-  ai.value = a || "";
+  ai.value = r.a;
+  const ti = document.createElement("input");
+  ti.type = "text";
+  ti.placeholder = "Category (optional)";
+  ti.setAttribute("list", "tagList");
+  ti.value = r.tag;
+  const meta = document.createElement("div");
+  meta.className = "meta";
   const del = document.createElement("button");
   del.type = "button";
   del.className = "danger";
   del.textContent = "Delete";
-  del.onclick = () => row.remove();
-  row.append(qi, ai, del);
-  $("qaList").appendChild(row);
+  body.append(qi, ai, ti, meta, del);
+  row.append(head, body);
+
+  function paint() {
+    const open = openIds.has(r.id);
+    chev.textContent = open ? "▾" : "▸";
+    qs.textContent = r.q || "(new question)";
+    chip.textContent = r.tag;
+    chip.classList.toggle("hide", !r.tag);
+    as.textContent = r.a;
+    as.classList.toggle("hide", open || !r.a);
+    body.classList.toggle("hide", !open);
+    meta.textContent = "Last edited: " + fmtDate(r.updated);
+  }
+
+  function touch() {
+    r.q = qi.value;
+    r.a = ai.value;
+    r.tag = ti.value.trim();
+    r.updated = new Date().toISOString();
+    paint();
+  }
+
+  head.addEventListener("click", () => {
+    if (openIds.has(r.id)) openIds.delete(r.id); else openIds.add(r.id);
+    paint();
+    updateCount();
+  });
+  qi.addEventListener("input", touch);
+  ai.addEventListener("input", touch);
+  ti.addEventListener("input", () => { touch(); refreshTags(); });
+  let armed = false;
+  del.addEventListener("click", () => {
+    if (!armed) {
+      armed = true;
+      del.textContent = "Click again to confirm";
+      setTimeout(() => { armed = false; del.textContent = "Delete"; }, 3000);
+      return;
+    }
+    db = db.filter(x => x.id !== r.id);
+    openIds.delete(r.id);
+    renderList();
+  });
+  paint();
+  return row;
+}
+
+function updateCount() {
+  const n = visibleRecords().length;
+  const filtered = view.search.trim() || view.tag;
+  $("qaCount").textContent = (filtered ? "Showing " + n + " of " + db.length : db.length + " entr" + (db.length === 1 ? "y" : "ies")) + " · " + openIds.size + " open";
+}
+
+function renderList() {
+  refreshTags();
+  const list = visibleRecords();
+  const box = $("qaList");
+  box.innerHTML = "";
+  if (!list.length) {
+    const e = document.createElement("div");
+    e.className = "meta";
+    e.textContent = db.length ? "No entries match your search." : "No entries yet. Use Add entry or Interview me.";
+    box.appendChild(e);
+  }
+  list.forEach(r => box.appendChild(buildRow(r)));
+  updateCount();
+}
+
+function addQaRow(q, a, tag) {
+  const rec = normalize({ q: q, a: a, tag: tag, updated: new Date().toISOString() });
+  db.push(rec);
+  view.search = "";
+  view.tag = "";
+  $("qaSearch").value = "";
+  openIds.add(rec.id);
+  renderList();
+  const row = $("qaList").querySelector('[data-id="' + rec.id + '"]');
+  if (row) row.scrollIntoView({ block: "nearest" });
+  return row;
 }
 
 function fillEditor() {
   $("personaIn").value = knowledge.persona_extra;
   $("notesIn").value = knowledge.notes.join("\n\n");
-  $("qaList").innerHTML = "";
-  knowledge.qa.forEach(x => addQaRow(x.q, x.a));
+  db = knowledge.qa.map(normalize);
+  openIds.clear();
+  view.search = "";
+  view.tag = "";
+  view.sort = "new";
+  $("qaSearch").value = "";
+  $("qaSort").value = "new";
+  renderList();
 }
 
 function readEditor() {
   return {
     persona_extra: $("personaIn").value.trim(),
     notes: $("notesIn").value.split(/\n\s*\n/).map(x => x.trim()).filter(Boolean),
-    qa: Array.from($("qaList").children).map(r => ({
-      q: r.querySelector("input").value.trim(),
-      a: r.querySelector("textarea").value.trim()
-    })).filter(x => x.q && x.a)
+    qa: db.filter(r => r.q.trim() && r.a.trim()).map(r => ({
+      id: r.id,
+      q: r.q.trim(),
+      a: r.a.trim(),
+      tag: r.tag,
+      updated: r.updated
+    }))
   };
+}
+
+function csvEscape(v) { return '"' + String(v).replace(/"/g, '""') + '"'; }
+
+function toCsv(list) {
+  const rows = [["id", "question", "answer", "category", "updated"]].concat(list.map(r => [r.id, r.q, r.a, r.tag, r.updated]));
+  return rows.map(r => r.map(csvEscape).join(",")).join("\r\n");
+}
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [], cur = "", inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQ) {
+      if (c === '"' && text[i + 1] === '"') { cur += '"'; i++; }
+      else if (c === '"') inQ = false;
+      else cur += c;
+    } else if (c === '"') inQ = true;
+    else if (c === ",") { row.push(cur); cur = ""; }
+    else if (c === "\n" || c === "\r") {
+      if (c === "\r" && text[i + 1] === "\n") i++;
+      row.push(cur); cur = "";
+      if (row.some(x => x !== "")) rows.push(row);
+      row = [];
+    } else cur += c;
+  }
+  row.push(cur);
+  if (row.some(x => x !== "")) rows.push(row);
+  return rows;
+}
+
+function importItems(items) {
+  const have = new Set(db.map(r => r.q.trim().toLowerCase()));
+  let added = 0, skipped = 0;
+  items.forEach(x => {
+    const q = String(x.q || x.question || "").trim();
+    const a = String(x.a || x.answer || "").trim();
+    if (!q || !a || have.has(q.toLowerCase())) { skipped++; return; }
+    have.add(q.toLowerCase());
+    db.push(normalize({ q: q, a: a, tag: x.tag || x.category || "", updated: x.updated || new Date().toISOString() }));
+    added++;
+  });
+  renderList();
+  msg("Imported " + added + ", skipped " + skipped + " (duplicates or empty). Press Save to GitHub to keep them.");
 }
 
 async function enterEditor() {
@@ -618,7 +847,7 @@ $("interviewBtn").addEventListener("click", interviewStart);
 $("iqNext").addEventListener("click", () => {
   const a = $("iqAns").value.trim();
   if (!a) return msg("Type an answer or press Skip.");
-  addQaRow(iq.list[iq.i], a);
+  addQaRow(iq.list[iq.i], a, "Interview");
   iq.added++;
   iq.i++;
   msg("");
@@ -645,7 +874,46 @@ $("logoutBtn").addEventListener("click", () => {
   msg("Logged out.");
   status.textContent = "";
 });
-$("addQa").addEventListener("click", () => addQaRow("", ""));
+$("addQa").addEventListener("click", () => {
+  const row = addQaRow("", "", "");
+  if (row) row.querySelector("input").focus();
+});
+$("qaSearch").addEventListener("input", e => { view.search = e.target.value; renderList(); });
+$("qaTag").addEventListener("change", e => { view.tag = e.target.value; renderList(); });
+$("qaSort").addEventListener("change", e => { view.sort = e.target.value; renderList(); });
+$("qaExpand").addEventListener("click", () => { visibleRecords().forEach(r => openIds.add(r.id)); renderList(); });
+$("qaCollapse").addEventListener("click", () => { openIds.clear(); renderList(); });
+$("importBtn").addEventListener("click", () => $("qaFile").click());
+$("qaFile").addEventListener("change", async e => {
+  const f = e.target.files[0];
+  e.target.value = "";
+  if (!f) return;
+  try {
+    const text = await f.text();
+    if (/\.csv$/i.test(f.name)) {
+      const rows = parseCsv(text);
+      const head = rows.shift().map(h => h.trim().toLowerCase());
+      const col = names => head.findIndex(h => names.includes(h));
+      const qi = col(["question", "q"]), ai = col(["answer", "a"]), ti = col(["category", "tag"]), ui = col(["updated"]);
+      if (qi < 0 || ai < 0) throw new Error("CSV needs question and answer columns.");
+      importItems(rows.map(r => ({ q: r[qi], a: r[ai], tag: ti >= 0 ? r[ti] : "", updated: ui >= 0 ? r[ui] : "" })));
+    } else {
+      const j = JSON.parse(text);
+      const arr = Array.isArray(j) ? j : j.qa;
+      if (!Array.isArray(arr)) throw new Error("JSON must be a list of entries or an object with a qa list.");
+      importItems(arr);
+    }
+  } catch (err) {
+    msg("Import failed: " + err.message);
+  }
+});
+$("exportCsv").addEventListener("click", () => {
+  const blob = new Blob([toCsv(readEditor().qa)], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "answers.csv";
+  a.click();
+});
 $("saveBtn").addEventListener("click", save);
 $("exportBtn").addEventListener("click", () => {
   const blob = new Blob([JSON.stringify(readEditor(), null, 2)], { type: "application/json" });

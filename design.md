@@ -38,3 +38,12 @@ A single `index.html` for GitHub Pages. It shows an avatar of Ian and a chat box
 - Questions already answered in the Q&A list are skipped. "Save and next" adds the answer as a Q&A entry, "Skip" moves on, and "Finish" saves everything to GitHub automatically if any answers were added.
 - Answers become ordinary Q&A entries, so they can be edited or deleted afterwards. Add more questions by editing the `INTERVIEW` array.
 - Matching is keyword-based, so a visitor's wording does not need to match the question exactly, but similar words help.
+
+## Answer database (admin)
+- Each Q&A is a record in `knowledge.json` with `id`, `q`, `a`, `tag` (category) and `updated` (ISO date). Older entries without these fields are upgraded automatically when the admin panel loads, and saved with them.
+- Entries are collapsed by default and show the question, category and a one-line answer preview. Click to fold or unfold. "Expand all" and "Collapse all" apply to what is currently shown.
+- Search matches question, answer and category text. The category dropdown filters by category and the sort menu orders by newest, oldest, question A to Z, or category. The counter shows how many entries match and how many are open.
+- Delete asks for a second click within three seconds. Nothing is written to GitHub until "Save to GitHub" is pressed.
+- Import accepts JSON (a list of entries, or a full knowledge file) or CSV with question and answer columns and an optional category column. Questions already in the database are skipped. Export gives JSON or CSV.
+- Interview answers are tagged "Interview" and answers added with "Teach a better answer" are tagged "Taught".
+- If the database ever outgrows a single JSON file or needs several editors at once, move the records to a hosted database such as Supabase and keep this panel as the front end.
