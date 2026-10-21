@@ -19,7 +19,7 @@ A single `index.html` for GitHub Pages. It shows an avatar of Ian and a chat box
 - For a true copy of your style, fine-tune a model on your writing and serve it behind the endpoint.
 
 ## Avatar
-- The cartoon portrait pulses slightly and the ring glows while the avatar is replying or speaking. If the image fails to load, a simple SVG face with an animated mouth is shown.
+- The portrait is drawn on a canvas. While the avatar is replying or speaking, the jaw and goatee shift down with a feathered edge and a dark mouth opening (with teeth and tongue) is drawn under the upper lip line. Openness changes every 70 to 180 ms at random with short pauses, and each spoken word boundary triggers a new beat. Browsers do not expose the speech audio, so the movement is simulated rather than true lip sync. The mouth position and jaw region are constants (`MOUTH`, `JAW`) tuned to avatar.jpg; if the picture is replaced they must be re-tuned. If the image fails to load, a simple SVG face with an animated mouth is shown.
 - "Speak replies" uses the browser's built-in speech synthesis. It automatically picks a male English voice by matching known male voice names, with no visitor choice, and lowers the pitch if only a non-male voice exists. Available voices depend on the visitor's device, and browsers do not report voice gender, so name matching is a best guess. For your own cloned voice, generate audio from a service like ElevenLabs on the server side and play it in the page.
 - Lip-synced video avatars (HeyGen, Synthesia) need a server or paid API and are not possible in a pure static page.
 

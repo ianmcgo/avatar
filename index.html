@@ -12,10 +12,9 @@ body{background:var(--bg);color:var(--text);font:16px/1.45 system-ui,sans-serif;
 header{width:100%;max-width:720px;padding:20px 16px 8px;display:flex;flex-direction:column;align-items:center;gap:8px}
 #avatarWrap{width:160px;height:160px;border-radius:50%;overflow:hidden;background:var(--panel);border:3px solid var(--accent);display:flex;align-items:center;justify-content:center;transition:box-shadow .2s}
 #avatarWrap.talking{box-shadow:0 0 0 6px rgba(124,92,255,.35)}
-#avatarWrap img{width:100%;height:100%;object-fit:cover;object-position:62% 30%;display:none}
-.talking img{animation:bob .3s infinite alternate}
-@keyframes bob{from{transform:scale(1)}to{transform:scale(1.05)}}
-#avatarWrap.photo img{display:block}
+#avatarWrap img{display:none!important}
+#face{width:100%;height:100%;display:none}
+#avatarWrap.photo #face{display:block}
 #avatarWrap.photo svg{display:none}
 #mouth{transform-origin:70px 98px}
 .talking #mouth{animation:talk .22s infinite alternate}
@@ -56,6 +55,7 @@ footer a{color:var(--accent)}
 <header>
 <div id="avatarWrap">
 <img id="photo" alt="Ian">
+<canvas id="face" width="480" height="480"></canvas>
 <svg viewBox="0 0 140 140" width="140" height="140">
 <circle cx="70" cy="70" r="70" fill="#202545"/>
 <circle cx="70" cy="68" r="40" fill="#f2c9a0"/>
@@ -145,8 +145,82 @@ $("name").textContent = CONFIG.name;
 $("foot").innerHTML = "Created by " + CONFIG.name + " · " + CONFIG.links.map(l => `<a href="${l.href}" target="_blank" rel="noopener">${l.label}</a>`).join(" · ");
 
 const photo = $("photo");
-photo.onload = () => wrap.classList.add("photo");
+const faceCv = $("face");
+const fctx = faceCv.getContext("2d");
+const FK = faceCv.width / 360;
+const MOUTH = { x: 277, y: 176 };
+let openness = 0;
+let openTarget = 0;
+let nextBeat = 0;
+
+function drawFace(o) {
+  fctx.setTransform(FK, 0, 0, FK, -49.6 * FK, 0);
+  fctx.clearRect(0, 0, 440, 360);
+  fctx.drawImage(photo, 0, 0);
+  if (o < 0.04) return;
+  const d = o * 9;
+  fctx.drawImage(jaw, 0, 0, JAW.w, JAW.h, JAW.x, JAW.y + d, JAW.w, JAW.h);
+  const rx = 18 + o * 8;
+  const ry = 1.5 + d * 0.62;
+  const cy = MOUTH.y + 2 + d * 0.45;
+  fctx.fillStyle = "#2a0d12";
+  fctx.beginPath();
+  fctx.ellipse(MOUTH.x, cy, rx, ry, 0, 0, Math.PI * 2);
+  fctx.fill();
+  if (ry > 4) {
+    fctx.save();
+    fctx.beginPath();
+    fctx.ellipse(MOUTH.x, cy, rx, ry, 0, 0, Math.PI * 2);
+    fctx.clip();
+    fctx.fillStyle = "#b24a58";
+    fctx.beginPath();
+    fctx.ellipse(MOUTH.x, cy + ry * 0.75, rx * 0.6, ry * 0.5, 0, 0, Math.PI * 2);
+    fctx.fill();
+    fctx.fillStyle = "#f3efe6";
+    fctx.fillRect(MOUTH.x - rx, cy - ry, rx * 2, Math.min(3.2, ry * 0.45));
+    fctx.restore();
+  }
+}
+
+function faceLoop(t) {
+  const talking = wrap.classList.contains("talking");
+  if (talking) {
+    if (t > nextBeat) {
+      const pause = Math.random() < 0.18;
+      openTarget = pause ? 0 : 0.25 + Math.random() * 0.75;
+      nextBeat = t + (pause ? 130 : 70 + Math.random() * 110);
+    }
+  } else {
+    openTarget = 0;
+  }
+  openness += (openTarget - openness) * 0.35;
+  if (!talking && openness < 0.03) openness = 0;
+  if (wrap.classList.contains("photo")) drawFace(openness);
+  requestAnimationFrame(faceLoop);
+}
+
+const JAW = { x: 232, y: 180, w: 94, h: 92 };
+const jaw = document.createElement("canvas");
+jaw.width = JAW.w;
+jaw.height = JAW.h;
+
+function buildJaw() {
+  const jc = jaw.getContext("2d");
+  jc.clearRect(0, 0, JAW.w, JAW.h);
+  jc.globalCompositeOperation = "source-over";
+  jc.drawImage(photo, JAW.x, JAW.y, JAW.w, JAW.h, 0, 0, JAW.w, JAW.h);
+  jc.globalCompositeOperation = "destination-in";
+  const g = jc.createRadialGradient(JAW.w / 2, 44, 24, JAW.w / 2, 44, 48);
+  g.addColorStop(0, "rgba(0,0,0,1)");
+  g.addColorStop(1, "rgba(0,0,0,0)");
+  jc.fillStyle = g;
+  jc.fillRect(0, 0, JAW.w, JAW.h);
+  jc.globalCompositeOperation = "source-over";
+}
+
+photo.onload = () => { buildJaw(); wrap.classList.add("photo"); drawFace(0); };
 photo.src = CONFIG.photo;
+requestAnimationFrame(faceLoop);
 
 const history = [];
 let engine = null;
@@ -253,6 +327,8 @@ function speak(text) {
   }
   u.onstart = () => wrap.classList.add("talking");
   u.onend = () => wrap.classList.remove("talking");
+  u.onerror = () => wrap.classList.remove("talking");
+  u.onboundary = () => { nextBeat = 0; };
   speechSynthesis.speak(u);
 }
 
