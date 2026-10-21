@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chat with Ian</title>
+<style>
+:root{--bg:#0f1220;--panel:#181c30;--accent:#7c5cff;--text:#e8eaf6;--muted:#8d93b5;--me:#2a2f4d;--bot:#202545}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font:16px/1.45 system-ui,sans-serif;display:flex;flex-direction:column;align-items:center}
+header{width:100%;max-width:720px;padding:20px 16px 8px;display:flex;flex-direction:column;align-items:center;gap:8px}
+#avatarWrap{width:140px;height:140px;border-radius:50%;overflow:hidden;background:var(--panel);border:3px solid var(--accent);display:flex;align-items:center;justify-content:center;transition:box-shadow .2s}
+#avatarWrap.talking{box-shadow:0 0 0 6px rgba(124,92,255,.35)}
+#avatarWrap img{width:100%;height:100%;object-fit:cover;display:none}
+#avatarWrap.photo img{display:block}
+#avatarWrap.photo svg{display:none}
+#mouth{transform-origin:70px 98px}
+.talking #mouth{animation:talk .22s infinite alternate}
+@keyframes talk{from{transform:scaleY(.4)}to{transform:scaleY(1.6)}}
+h1{margin:0;font-size:22px}
+#status{color:var(--muted);font-size:13px;min-height:18px;text-align:center}
+#log{flex:1;width:100%;max-width:720px;overflow-y:auto;padding:8px 16px;display:flex;flex-direction:column;gap:10px}
+.msg{max-width:85%;padding:10px 14px;border-radius:16px;white-space:pre-wrap;word-wrap:break-word}
+.me{align-self:flex-end;background:var(--me);border-bottom-right-radius:4px}
+.bot{align-self:flex-start;background:var(--bot);border-bottom-left-radius:4px}
+form{width:100%;max-width:720px;padding:10px 16px;display:flex;gap:8px}
+input{flex:1;padding:12px 14px;border-radius:12px;border:1px solid #2c3257;background:var(--panel);color:var(--text);font-size:16px}
+button{padding:12px 18px;border:0;border-radius:12px;background:var(--accent);color:#fff;font-size:16px;cursor:pointer}
+button:disabled{opacity:.5;cursor:default}
+#tools{display:flex;gap:12px;align-items:center;color:var(--muted);font-size:13px}
+#tools label{display:flex;gap:4px;align-items:center;cursor:pointer}
+footer{padding:8px 16px 16px;color:var(--muted);font-size:13px;text-align:center}
+footer a{color:var(--accent)}
+</style>
+</head>
+<body>
+<header>
+<div id="avatarWrap">
+<img id="photo" alt="Ian">
+<svg viewBox="0 0 140 140" width="140" height="140">
+<circle cx="70" cy="70" r="70" fill="#202545"/>
+<circle cx="70" cy="68" r="40" fill="#f2c9a0"/>
+<path d="M30 62 Q34 22 70 22 Q106 22 110 62 Q96 40 70 40 Q44 40 30 62Z" fill="#3b2a1e"/>
+<circle cx="54" cy="68" r="5" fill="#222"/>
+<circle cx="86" cy="68" r="5" fill="#222"/>
+<ellipse id="mouth" cx="70" cy="98" rx="11" ry="5" fill="#8a3b3b"/>
+</svg>
+</div>
+<h1 id="name"></h1>
+<div id="tools">
+<label><input type="checkbox" id="speak" style="flex:none"> Speak replies</label>
+</div>
+<div id="status"></div>
+</header>
+<div id="log"></div>
+<form id="form">
+<input id="input" placeholder="Say something..." autocomplete="off">
+<button id="send">Send</button>
+</form>
+<footer id="foot"></footer>
+<script type="module">
+const CONFIG = {
+  name: "Ian McGonigal",
+  firstName: "Ian",
+  photo: "avatar.png",
+  endpoint: "",
+  model: "Llama-3.2-1B-Instruct-q4f16_1-MLC",
+  greeting: "Hey, I'm Ian's AI avatar. Ask me anything about my projects, games, or videos.",
+  persona: [
+    "You are an AI avatar of Ian McGonigal, speaking in first person as Ian.",
+    "Ian runs a YouTube channel called Cabal Coffers, builds browser games and webapps, and supports his work on Patreon.",
+    "Keep replies short, friendly and casual.",
+    "If asked something you do not know about Ian, say you are not sure instead of inventing facts.",
+    "If asked, admit you are an AI avatar and not the real Ian."
+  ].join(" "),
+  facts: [
+    { keys: ["youtube","channel","videos","cabal"], reply: "My YouTube channel is Cabal Coffers: https://www.youtube.com/@cabalcoffers75" },
+    { keys: ["patreon","support","donate"], reply: "You can support my work on Patreon: https://www.patreon.com/cw/ianmcg" },
+    { keys: ["website","site","home"], reply: "My site is https://ianmcgo.github.io/website/" },
+    { keys: ["game","games","play"], reply: "I build browser games and webapps. Check my site and channel for the latest ones." },
+    { keys: ["who","name","you"], reply: "I'm an AI avatar of Ian McGonigal." }
+  ],
+  fallback: "I'm running in simple mode right now, so I can only answer a few topics: my YouTube channel, Patreon, website, and games.",
+  links: [
+    { label: "YouTube", href: "https://www.youtube.com/@cabalcoffers75" },
+    { label: "Patreon", href: "https://www.patreon.com/cw/ianmcg" },
+    { label: "Website", href: "https://ianmcgo.github.io/website/" }
+  ]
+};
+
+const $ = id => document.getElementById(id);
+const log = $("log"), input = $("input"), send = $("send"), status = $("status"), wrap = $("avatarWrap");
+$("name").textContent = CONFIG.name;
+$("foot").innerHTML = "Created by " + CONFIG.name + " · " + CONFIG.links.map(l => `<a href="${l.href}" target="_blank" rel="noopener">${l.label}</a>`).join(" · ");
+
+const photo = $("photo");
+photo.onload = () => wrap.classList.add("photo");
+photo.src = CONFIG.photo;
+
+const history = [{ role: "system", content: CONFIG.persona }];
+let engine = null;
+let mode = "simple";
+
+function addMsg(text, who) {
+  const d = document.createElement("div");
+  d.className = "msg " + who;
+  d.textContent = text;
+  log.appendChild(d);
+  log.scrollTop = log.scrollHeight;
+  return d;
+}
+
+function speak(text) {
+  if (!$("speak").checked || !("speechSynthesis" in window)) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.onstart = () => wrap.classList.add("talking");
+  u.onend = () => wrap.classList.remove("talking");
+  speechSynthesis.speak(u);
+}
+
+function simpleReply(text) {
+  const t = text.toLowerCase();
+  for (const f of CONFIG.facts) if (f.keys.some(k => t.includes(k))) return f.reply;
+  return CONFIG.fallback;
+}
+
+async function endpointReply(messages) {
+  const r = await fetch(CONFIG.endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages })
+  });
+  if (!r.ok) throw new Error("Endpoint error " + r.status);
+  const j = await r.json();
+  return j.reply;
+}
+
+async function init() {
+  addMsg(CONFIG.greeting, "bot");
+  if (CONFIG.endpoint) {
+    mode = "endpoint";
+    status.textContent = "Online";
+    return;
+  }
+  if (!("gpu" in navigator)) {
+    status.textContent = "Simple mode (this browser has no WebGPU for the AI model)";
+    return;
+  }
+  send.disabled = true;
+  status.textContent = "Loading AI model (first visit downloads about 700 MB, then it is cached)...";
+  try {
+    const webllm = await import("https://esm.run/@mlc-ai/web-llm");
+    engine = await webllm.CreateMLCEngine(CONFIG.model, {
+      initProgressCallback: p => { status.textContent = p.text; }
+    });
+    mode = "local";
+    status.textContent = "Ready";
+  } catch (e) {
+    status.textContent = "Could not load the AI model, using simple mode";
+  }
+  send.disabled = false;
+}
+
+$("form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  addMsg(text, "me");
+  history.push({ role: "user", content: text });
+  send.disabled = true;
+  const bubble = addMsg("...", "bot");
+  wrap.classList.add("talking");
+  let reply = "";
+  try {
+    if (mode === "local") {
+      const stream = await engine.chat.completions.create({ messages: history, stream: true, temperature: 0.7, max_tokens: 300 });
+      for await (const chunk of stream) {
+        reply += chunk.choices[0]?.delta?.content || "";
+        bubble.textContent = reply || "...";
+        log.scrollTop = log.scrollHeight;
+      }
+    } else if (mode === "endpoint") {
+      reply = await endpointReply(history);
+      bubble.textContent = reply;
+    } else {
+      await new Promise(r => setTimeout(r, 500));
+      reply = simpleReply(text);
+      bubble.textContent = reply;
+    }
+  } catch (err) {
+    reply = "Sorry, something went wrong.";
+    bubble.textContent = reply;
+  }
+  history.push({ role: "assistant", content: reply });
+  wrap.classList.remove("talking");
+  speak(reply);
+  send.disabled = false;
+  input.focus();
+});
+
+init();
+</script>
+</body>
+</html>
