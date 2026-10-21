@@ -51,3 +51,11 @@ A single `index.html` for GitHub Pages. It shows an avatar of Ian and a chat box
 ## Foldable database section
 - The whole "Answer database" section in the admin panel folds under one header that shows the entry count. It starts collapsed. Adding an entry or using "Teach a better answer" opens it automatically; interview answers are added without opening it.
 - The Save to GitHub and Close buttons stay outside the fold so they are always visible.
+
+## Project docs (design.md sync)
+- The admin panel has a foldable "Project docs (design.md)" section. "Sync from GitHub" lists the owner's repos (the owner comes from `CONFIG.repo`), looks for `design.md`, `DESIGN.md` or `docs/design.md` in each, and stores the text in the `docs` list of `knowledge.json`. The avatar's own repo is skipped. Docs for repos that no longer have a design file are dropped on the next sync.
+- Public repos only by default. `knowledge.json` is served publicly by GitHub Pages, so anything synced from a private repo becomes publicly readable. The "Include private repos" checkbox is off by default and warns about this. The token must also be given access to those private repos (Contents read) for them to be found.
+- The docs are not edited in the panel. Edit the design.md in the source repo and sync again. Each entry can be unfolded to preview the text, or removed.
+- Nothing is written until "Save to GitHub" is pressed.
+- On the public page each doc is split into chunks at markdown headings, long sections into pieces of about 1100 characters. Simple mode answers with the best matching chunk when at least two meaningful words match, after the Q&A, built-in answers and notes. Smart mode adds a list of project names and descriptions plus the three best chunks to the model's instructions, so a small model is not overloaded.
+- Q&A answers always win over doc chunks, so a hand-written answer is the way to correct anything the docs get wrong.
