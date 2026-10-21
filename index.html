@@ -479,8 +479,9 @@ async function endpointReply(messages) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ messages })
   });
-  if (!r.ok) throw new Error("Endpoint error " + r.status);
-  const j = await r.json();
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error("Endpoint error " + r.status + (j.detail ? ": " + j.detail : ""));
+  if (!j.reply) throw new Error("Endpoint sent an empty reply");
   return j.reply;
 }
 
@@ -1134,7 +1135,7 @@ $("endpointTest").addEventListener("click", async () => {
   try {
     const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: [{ role: "system", content: "Reply in five words or fewer." }, { role: "user", content: "Say hello." }] }) });
     const j = await r.json();
-    if (!r.ok) throw new Error(j.error || "status " + r.status);
+    if (!r.ok) throw new Error((j.error || "status " + r.status) + (j.detail ? ": " + j.detail : ""));
     msg("Server works. It said: " + j.reply + " Now press Save to GitHub.");
   } catch (e) {
     msg("Server test failed: " + errText(e));

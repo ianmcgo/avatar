@@ -78,3 +78,7 @@ A single `index.html` for GitHub Pages. It shows an avatar of Ian and a chat box
 ## Phones and smart mode
 - The in-browser model button is hidden on phones, because phone graphics memory often cannot run it ("Object has already been disposed"). After a smart mode failure the page stops retrying the model and uses simple answers or the AI server.
 - The persona now asks for casual, short, human replies without lists or "as an AI" language.
+
+## Worker diagnostics
+- The Worker uses the `AI` binding if it exists, otherwise any binding that has a `run` function, so the variable name chosen in the Cloudflare dashboard does not matter.
+- Failures return `{error, detail}`. The detail is the real reason, for example a missing binding or a Cloudflare error code, and the admin Test server button and the status line on the chat page both show it.

@@ -34,11 +34,14 @@ export default {
       .slice(-14);
     if (!messages.length) return reply({ error: "no messages" }, 400, cors);
 
+    const ai = env.AI || Object.values(env || {}).find(v => v && typeof v.run === "function");
+    if (!ai) return reply({ error: "ai failed", detail: "No Workers AI binding found. Add one under Settings, then Bindings." }, 502, cors);
+
     try {
-      const out = await env.AI.run(MODEL, { messages: messages, max_tokens: 300, temperature: 0.8 });
+      const out = await ai.run(MODEL, { messages: messages, max_tokens: 300, temperature: 0.8 });
       return reply({ reply: String(out.response || "").trim() }, 200, cors);
     } catch (e) {
-      return reply({ error: "ai failed" }, 502, cors);
+      return reply({ error: "ai failed", detail: String((e && e.message) || e).slice(0, 300) }, 502, cors);
     }
   }
 };
