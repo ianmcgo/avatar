@@ -32,6 +32,22 @@ button:disabled{opacity:.5;cursor:default}
 #tools label{display:flex;gap:4px;align-items:center;cursor:pointer}
 footer{padding:8px 16px 16px;color:var(--muted);font-size:13px;text-align:center}
 footer a{color:var(--accent)}
+#adminBtn{background:none;color:var(--muted);padding:0 4px;font-size:13px;text-decoration:underline}
+#admin{position:fixed;inset:0;background:rgba(5,7,15,.82);display:none;align-items:flex-start;justify-content:center;overflow-y:auto;padding:16px;z-index:10}
+#admin.open{display:flex}
+#adminBox{background:var(--panel);border:1px solid #2c3257;border-radius:16px;padding:18px;width:100%;max-width:720px;display:flex;flex-direction:column;gap:12px}
+#adminBox h2{margin:0;font-size:18px}
+#adminBox h3{margin:6px 0 0;font-size:14px;color:var(--muted)}
+#adminBox textarea,#adminBox input[type=text],#adminBox input[type=password]{width:100%;padding:10px;border-radius:10px;border:1px solid #2c3257;background:var(--bg);color:var(--text);font:inherit;font-size:14px}
+#adminBox textarea{min-height:70px;resize:vertical}
+.row{display:flex;flex-direction:column;gap:6px;padding:10px;border:1px solid #2c3257;border-radius:12px}
+.bar{display:flex;gap:8px;flex-wrap:wrap}
+.bar button,.row button,.teach{padding:8px 12px;font-size:14px}
+.ghost{background:var(--me)}
+.danger{background:#8a3b3b}
+.teach{margin-top:6px;background:var(--me);color:var(--muted);font-size:12px;padding:3px 8px;border-radius:8px}
+#adminMsg{font-size:13px;color:var(--muted);min-height:18px}
+.hide{display:none!important}
 </style>
 </head>
 <body>
@@ -59,13 +75,37 @@ footer a{color:var(--accent)}
 <input id="input" placeholder="Say something..." autocomplete="off">
 <button id="send">Send</button>
 </form>
-<footer id="foot"></footer>
+<footer><span id="foot"></span> · <button type="button" id="adminBtn">Admin</button></footer>
+<div id="admin">
+<div id="adminBox">
+<h2>Admin</h2>
+<div id="loginView">
+<p style="margin:0;color:var(--muted);font-size:14px">Paste a GitHub fine-grained token with Contents read and write access to this repo. It is stored only in this browser.</p>
+<input type="password" id="tokenIn" placeholder="github_pat_..." autocomplete="off">
+<div class="bar"><button type="button" id="loginBtn">Log in</button><button type="button" class="ghost" id="closeBtn1">Close</button></div>
+</div>
+<div id="editView" class="hide">
+<h3>Extra personality instructions</h3>
+<textarea id="personaIn" placeholder="How you talk, what you care about, things to never say..."></textarea>
+<h3>Notes about you (separate each with a blank line)</h3>
+<textarea id="notesIn" style="min-height:140px" placeholder="Facts, bio, opinions, writing samples..."></textarea>
+<h3>Questions and answers</h3>
+<div id="qaList" style="display:flex;flex-direction:column;gap:10px"></div>
+<div class="bar"><button type="button" class="ghost" id="addQa">Add Q&amp;A</button></div>
+<div class="bar"><button type="button" id="saveBtn">Save to GitHub</button><button type="button" class="ghost" id="exportBtn">Export JSON</button><button type="button" class="ghost" id="closeBtn2">Close</button><button type="button" class="danger" id="logoutBtn">Log out</button></div>
+</div>
+<div id="adminMsg"></div>
+</div>
+</div>
 <script type="module">
 const CONFIG = {
   name: "Ian McGonigal",
   firstName: "Ian",
   photo: "avatar.png",
   endpoint: "",
+  repo: "ianmcgo/avatar",
+  branch: "main",
+  knowledgeFile: "knowledge.json",
   model: "Llama-3.2-1B-Instruct-q4f16_1-MLC",
   greeting: "Hey, I'm Ian's AI avatar. Ask me anything about my projects, games, or videos.",
   persona: [
@@ -80,9 +120,9 @@ const CONFIG = {
     { keys: ["patreon","support","donate"], reply: "You can support my work on Patreon: https://www.patreon.com/cw/ianmcg" },
     { keys: ["website","site","home"], reply: "My site is https://ianmcgo.github.io/website/" },
     { keys: ["game","games","play"], reply: "I build browser games and webapps. Check my site and channel for the latest ones." },
-    { keys: ["who","name","you"], reply: "I'm an AI avatar of Ian McGonigal." }
+    { keys: ["who are","your name","who is ian"], reply: "I'm an AI avatar of Ian McGonigal." }
   ],
-  fallback: "I'm running in simple mode right now, so I can only answer a few topics: my YouTube channel, Patreon, website, and games.",
+  fallback: "I'm not sure about that one yet. Ask me about my YouTube channel, Patreon, website, or games.",
   links: [
     { label: "YouTube", href: "https://www.youtube.com/@cabalcoffers75" },
     { label: "Patreon", href: "https://www.patreon.com/cw/ianmcg" },
@@ -99,17 +139,74 @@ const photo = $("photo");
 photo.onload = () => wrap.classList.add("photo");
 photo.src = CONFIG.photo;
 
-const history = [{ role: "system", content: CONFIG.persona }];
+const history = [];
 let engine = null;
 let mode = "simple";
+let knowledge = { persona_extra: "", notes: [], qa: [] };
+let admin = { token: null, sha: null };
+const TOKEN_KEY = "avatar_admin_token";
 
-function addMsg(text, who) {
+const STOP = new Set("the and for are you your what who how why when where which that this with have has had was were will would can could should about into from they them their there then than but not any all out get got does did just like tell me my our its it is in on at to of a an i do be or so if as by we he she".split(" "));
+
+function words(t) {
+  return (t.toLowerCase().match(/[a-z0-9']+/g) || []).filter(w => w.length > 2 && !STOP.has(w)).map(w => w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w);
+}
+
+function score(query, text) {
+  const q = new Set(words(query));
+  if (!q.size) return 0;
+  const t = new Set(words(text));
+  let n = 0;
+  q.forEach(w => { if (t.has(w)) n++; });
+  return n;
+}
+
+function topMatches(query, items, textOf, limit) {
+  return items
+    .map(it => ({ it, s: score(query, textOf(it)) }))
+    .filter(x => x.s > 0)
+    .sort((a, b) => b.s - a.s)
+    .slice(0, limit)
+    .map(x => x.it);
+}
+
+function loadToken() {
+  try { return localStorage.getItem(TOKEN_KEY); } catch (e) { return null; }
+}
+function saveToken(t) {
+  try { if (t) localStorage.setItem(TOKEN_KEY, t); else localStorage.removeItem(TOKEN_KEY); } catch (e) {}
+}
+
+function addMsg(text, who, q) {
   const d = document.createElement("div");
   d.className = "msg " + who;
-  d.textContent = text;
+  const span = document.createElement("span");
+  span.textContent = text;
+  d.appendChild(span);
+  if (who === "bot") d.dataset.q = q || "";
   log.appendChild(d);
   log.scrollTop = log.scrollHeight;
   return d;
+}
+
+function setBubble(d, text) {
+  d.firstChild.textContent = text;
+  log.scrollTop = log.scrollHeight;
+}
+
+function addTeach(d) {
+  if (!admin.token || !d.dataset.q) return;
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "teach";
+  b.textContent = "Teach a better answer";
+  b.onclick = () => {
+    openAdmin();
+    addQaRow(d.dataset.q, d.firstChild.textContent);
+    $("qaList").lastChild.querySelector("textarea").focus();
+  };
+  d.appendChild(document.createElement("br"));
+  d.appendChild(b);
 }
 
 function speak(text) {
@@ -122,9 +219,22 @@ function speak(text) {
 }
 
 function simpleReply(text) {
+  const best = topMatches(text, knowledge.qa, x => x.q, 1)[0];
+  if (best && score(text, best.q) >= Math.max(1, Math.ceil(words(best.q).length * 0.5))) return best.a;
   const t = text.toLowerCase();
   for (const f of CONFIG.facts) if (f.keys.some(k => t.includes(k))) return f.reply;
+  const note = topMatches(text, knowledge.notes, x => x, 1)[0];
+  if (note) return note;
   return CONFIG.fallback;
+}
+
+function buildMessages(text) {
+  const qa = topMatches(text, knowledge.qa, x => x.q + " " + x.a, 3).map(x => "Q: " + x.q + "\nA: " + x.a);
+  const notes = topMatches(text, knowledge.notes, x => x, 3);
+  let sys = CONFIG.persona;
+  if (knowledge.persona_extra) sys += " " + knowledge.persona_extra;
+  if (qa.length || notes.length) sys += "\n\nFacts about Ian to use when relevant:\n" + notes.concat(qa).join("\n\n");
+  return [{ role: "system", content: sys }].concat(history);
 }
 
 async function endpointReply(messages) {
@@ -136,6 +246,19 @@ async function endpointReply(messages) {
   if (!r.ok) throw new Error("Endpoint error " + r.status);
   const j = await r.json();
   return j.reply;
+}
+
+async function loadKnowledge() {
+  try {
+    const r = await fetch(CONFIG.knowledgeFile + "?v=" + Date.now());
+    if (!r.ok) return;
+    const j = await r.json();
+    knowledge = {
+      persona_extra: j.persona_extra || "",
+      notes: Array.isArray(j.notes) ? j.notes : [],
+      qa: Array.isArray(j.qa) ? j.qa : []
+    };
+  } catch (e) {}
 }
 
 async function loadModel() {
@@ -157,12 +280,14 @@ async function loadModel() {
 
 async function init() {
   addMsg(CONFIG.greeting, "bot");
+  await loadKnowledge();
+  if (loadToken()) { admin.token = loadToken(); status.textContent = "Admin session saved. Click Admin to edit."; }
   if (CONFIG.endpoint) {
     mode = "endpoint";
     status.textContent = "Online";
     return;
   }
-  status.textContent = "Simple mode: answers a few topics";
+  if (!admin.token) status.textContent = "Simple mode: answers a few topics";
   let hasGpu = false;
   try { hasGpu = !!(navigator.gpu && await navigator.gpu.requestAdapter()); } catch (e) {}
   if (hasGpu) smart.style.display = "inline-block";
@@ -170,39 +295,199 @@ async function init() {
 
 smart.addEventListener("click", loadModel);
 
+function gh(path, opts) {
+  opts = opts || {};
+  return fetch("https://api.github.com/repos/" + CONFIG.repo + path, Object.assign({}, opts, {
+    headers: Object.assign({
+      "Authorization": "Bearer " + admin.token,
+      "Accept": "application/vnd.github+json"
+    }, opts.headers || {})
+  }));
+}
+
+function b64encode(str) { return btoa(unescape(encodeURIComponent(str))); }
+function b64decode(str) { return decodeURIComponent(escape(atob(str.replace(/\n/g, "")))); }
+
+function msg(t) { $("adminMsg").textContent = t; }
+
+function openAdmin() {
+  $("admin").classList.add("open");
+  if (admin.token && !$("editView").dataset.ready) enterEditor();
+  else showViews();
+}
+
+function closeAdmin() { $("admin").classList.remove("open"); }
+
+function showViews() {
+  const loggedIn = !!admin.token && $("editView").dataset.ready;
+  $("loginView").classList.toggle("hide", loggedIn);
+  $("editView").classList.toggle("hide", !loggedIn);
+}
+
+function addQaRow(q, a) {
+  const row = document.createElement("div");
+  row.className = "row";
+  const qi = document.createElement("input");
+  qi.type = "text";
+  qi.placeholder = "Question";
+  qi.value = q || "";
+  const ai = document.createElement("textarea");
+  ai.placeholder = "Answer, in your voice";
+  ai.value = a || "";
+  const del = document.createElement("button");
+  del.type = "button";
+  del.className = "danger";
+  del.textContent = "Delete";
+  del.onclick = () => row.remove();
+  row.append(qi, ai, del);
+  $("qaList").appendChild(row);
+}
+
+function fillEditor() {
+  $("personaIn").value = knowledge.persona_extra;
+  $("notesIn").value = knowledge.notes.join("\n\n");
+  $("qaList").innerHTML = "";
+  knowledge.qa.forEach(x => addQaRow(x.q, x.a));
+}
+
+function readEditor() {
+  return {
+    persona_extra: $("personaIn").value.trim(),
+    notes: $("notesIn").value.split(/\n\s*\n/).map(x => x.trim()).filter(Boolean),
+    qa: Array.from($("qaList").children).map(r => ({
+      q: r.querySelector("input").value.trim(),
+      a: r.querySelector("textarea").value.trim()
+    })).filter(x => x.q && x.a)
+  };
+}
+
+async function enterEditor() {
+  msg("Checking token...");
+  try {
+    const repo = await gh("");
+    if (repo.status === 401) throw new Error("Token rejected");
+    if (!repo.ok) throw new Error("Cannot reach repo (" + repo.status + ")");
+    const info = await repo.json();
+    if (!info.permissions || !info.permissions.push) throw new Error("Token has no write access to " + CONFIG.repo);
+    const f = await gh("/contents/" + CONFIG.knowledgeFile + "?ref=" + CONFIG.branch);
+    if (f.ok) {
+      const j = await f.json();
+      admin.sha = j.sha;
+      const data = JSON.parse(b64decode(j.content));
+      knowledge = {
+        persona_extra: data.persona_extra || "",
+        notes: Array.isArray(data.notes) ? data.notes : [],
+        qa: Array.isArray(data.qa) ? data.qa : []
+      };
+    } else if (f.status === 404) {
+      admin.sha = null;
+    } else {
+      throw new Error("Could not read " + CONFIG.knowledgeFile + " (" + f.status + ")");
+    }
+    saveToken(admin.token);
+    fillEditor();
+    $("editView").dataset.ready = "1";
+    showViews();
+    msg("Logged in.");
+    status.textContent = "Admin mode: use Teach under any reply to fix it";
+  } catch (e) {
+    admin.token = null;
+    saveToken(null);
+    $("editView").dataset.ready = "";
+    showViews();
+    msg(e.message);
+  }
+}
+
+async function save() {
+  const data = readEditor();
+  msg("Saving...");
+  try {
+    const body = {
+      message: "Update avatar knowledge",
+      content: b64encode(JSON.stringify(data, null, 2) + "\n"),
+      branch: CONFIG.branch
+    };
+    if (admin.sha) body.sha = admin.sha;
+    const r = await gh("/contents/" + CONFIG.knowledgeFile, { method: "PUT", body: JSON.stringify(body) });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      throw new Error(e.message || "Save failed (" + r.status + ")");
+    }
+    const j = await r.json();
+    admin.sha = j.content.sha;
+    knowledge = data;
+    msg("Saved. Visitors see it after GitHub Pages refreshes, usually within a minute or two.");
+  } catch (e) {
+    msg(e.message);
+  }
+}
+
+$("adminBtn").addEventListener("click", openAdmin);
+$("closeBtn1").addEventListener("click", closeAdmin);
+$("closeBtn2").addEventListener("click", closeAdmin);
+$("loginBtn").addEventListener("click", () => {
+  const t = $("tokenIn").value.trim();
+  if (!t) return msg("Paste a token first.");
+  admin.token = t;
+  $("tokenIn").value = "";
+  enterEditor();
+});
+$("logoutBtn").addEventListener("click", () => {
+  admin = { token: null, sha: null };
+  saveToken(null);
+  $("editView").dataset.ready = "";
+  showViews();
+  msg("Logged out.");
+  status.textContent = "";
+});
+$("addQa").addEventListener("click", () => addQaRow("", ""));
+$("saveBtn").addEventListener("click", save);
+$("exportBtn").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(readEditor(), null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "knowledge.json";
+  a.click();
+});
+
+let busy = false;
+
 $("form").addEventListener("submit", async e => {
   e.preventDefault();
   const text = input.value.trim();
-  if (!text) return;
+  if (!text || busy) return;
+  busy = true;
   input.value = "";
   addMsg(text, "me");
   history.push({ role: "user", content: text });
-  const bubble = addMsg("...", "bot");
+  const bubble = addMsg("...", "bot", text);
   wrap.classList.add("talking");
   let reply = "";
   try {
     if (mode === "local") {
-      const stream = await engine.chat.completions.create({ messages: history, stream: true, temperature: 0.7, max_tokens: 300 });
+      const stream = await engine.chat.completions.create({ messages: buildMessages(text), stream: true, temperature: 0.7, max_tokens: 300 });
       for await (const chunk of stream) {
         reply += chunk.choices[0]?.delta?.content || "";
-        bubble.textContent = reply || "...";
-        log.scrollTop = log.scrollHeight;
+        setBubble(bubble, reply || "...");
       }
     } else if (mode === "endpoint") {
-      reply = await endpointReply(history);
-      bubble.textContent = reply;
+      reply = await endpointReply(buildMessages(text));
+      setBubble(bubble, reply);
     } else {
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise(r => setTimeout(r, 400));
       reply = simpleReply(text);
-      bubble.textContent = reply;
+      setBubble(bubble, reply);
     }
   } catch (err) {
     reply = "Sorry, something went wrong.";
-    bubble.textContent = reply;
+    setBubble(bubble, reply);
   }
   history.push({ role: "assistant", content: reply });
+  addTeach(bubble);
   wrap.classList.remove("talking");
   speak(reply);
+  busy = false;
   input.focus();
 });
 
