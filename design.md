@@ -5,7 +5,7 @@ A single `index.html` for GitHub Pages. It shows an avatar of Ian and a chat box
 
 ## Files
 - `index.html`: the whole app
-- `avatar.png`: optional photo or portrait. If present it replaces the cartoon SVG. Put it next to `index.html`.
+- `avatar.jpg`: the cartoon portrait of Ian taken from the Patreon image on his website. It replaces the fallback SVG face. Replace the file to change it; the filename is set in `CONFIG.photo`.
 
 ## How replies work (three modes, picked automatically)
 1. **Endpoint mode**: if `CONFIG.endpoint` is set, messages are POSTed as `{messages}` and the server returns `{reply}`. Use this for a real hosted model (Claude API, OpenAI, or your own fine-tune) behind a Cloudflare Worker or similar. Never put an API key in `index.html`, because anyone can read it.
@@ -19,7 +19,7 @@ A single `index.html` for GitHub Pages. It shows an avatar of Ian and a chat box
 - For a true copy of your style, fine-tune a model on your writing and serve it behind the endpoint.
 
 ## Avatar
-- Cartoon SVG with a mouth that animates while the avatar is replying or speaking.
+- The cartoon portrait pulses slightly and the ring glows while the avatar is replying or speaking. If the image fails to load, a simple SVG face with an animated mouth is shown.
 - "Speak replies" uses the browser's built-in speech synthesis. It automatically picks a male English voice by matching known male voice names, with no visitor choice, and lowers the pitch if only a non-male voice exists. Available voices depend on the visitor's device, and browsers do not report voice gender, so name matching is a best guess. For your own cloned voice, generate audio from a service like ElevenLabs on the server side and play it in the page.
 - Lip-synced video avatars (HeyGen, Synthesia) need a server or paid API and are not possible in a pure static page.
 

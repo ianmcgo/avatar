@@ -10,9 +10,11 @@
 html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--text);font:16px/1.45 system-ui,sans-serif;display:flex;flex-direction:column;align-items:center}
 header{width:100%;max-width:720px;padding:20px 16px 8px;display:flex;flex-direction:column;align-items:center;gap:8px}
-#avatarWrap{width:140px;height:140px;border-radius:50%;overflow:hidden;background:var(--panel);border:3px solid var(--accent);display:flex;align-items:center;justify-content:center;transition:box-shadow .2s}
+#avatarWrap{width:160px;height:160px;border-radius:50%;overflow:hidden;background:var(--panel);border:3px solid var(--accent);display:flex;align-items:center;justify-content:center;transition:box-shadow .2s}
 #avatarWrap.talking{box-shadow:0 0 0 6px rgba(124,92,255,.35)}
-#avatarWrap img{width:100%;height:100%;object-fit:cover;display:none}
+#avatarWrap img{width:100%;height:100%;object-fit:cover;object-position:62% 30%;display:none}
+.talking img{animation:bob .3s infinite alternate}
+@keyframes bob{from{transform:scale(1)}to{transform:scale(1.05)}}
 #avatarWrap.photo img{display:block}
 #avatarWrap.photo svg{display:none}
 #mouth{transform-origin:70px 98px}
@@ -101,7 +103,7 @@ footer a{color:var(--accent)}
 const CONFIG = {
   name: "Ian McGonigal",
   firstName: "Ian",
-  photo: "avatar.png",
+  photo: "avatar.jpg",
   endpoint: "",
   repo: "ianmcgo/avatar",
   branch: "main",
