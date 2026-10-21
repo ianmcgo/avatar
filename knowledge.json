@@ -1,4 +1,5 @@
 {
+  "endpoint": "http://ian-avatar.ianmcgon.workers.dev",
   "docs": [
     {
       "repo": "simple-producer",
