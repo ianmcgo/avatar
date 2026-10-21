@@ -32,3 +32,9 @@ A single `index.html` for GitHub Pages. It shows an avatar of Ian and a chat box
 - Local mode needs a recent Chrome or Edge (WebGPU). Phones are often unsupported.
 - Chat history lives only in the page and resets on reload.
 - The avatar always says it is an AI, by design in the persona.
+
+## Admin interview
+- The "Interview me" button in the admin panel walks through a bank of common visitor questions (the `INTERVIEW` array in `index.html`), one at a time.
+- Questions already answered in the Q&A list are skipped. "Save and next" adds the answer as a Q&A entry, "Skip" moves on, and "Finish" saves everything to GitHub automatically if any answers were added.
+- Answers become ordinary Q&A entries, so they can be edited or deleted afterwards. Add more questions by editing the `INTERVIEW` array.
+- Matching is keyword-based, so a visitor's wording does not need to match the question exactly, but similar words help.

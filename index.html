@@ -91,6 +91,13 @@ footer a{color:var(--accent)}
 <textarea id="personaIn" placeholder="How you talk, what you care about, things to never say..."></textarea>
 <h3>Notes about you (separate each with a blank line)</h3>
 <textarea id="notesIn" style="min-height:140px" placeholder="Facts, bio, opinions, writing samples..."></textarea>
+<div class="bar"><button type="button" id="interviewBtn">Interview me</button></div>
+<div id="interview" class="row hide">
+<div id="iqProgress" style="font-size:13px;color:var(--muted)"></div>
+<div id="iqText" style="font-weight:600"></div>
+<textarea id="iqAns" style="min-height:100px" placeholder="Answer the way you would say it to a visitor..."></textarea>
+<div class="bar"><button type="button" id="iqNext">Save and next</button><button type="button" class="ghost" id="iqSkip">Skip</button><button type="button" class="ghost" id="iqStop">Finish</button></div>
+</div>
 <h3>Questions and answers</h3>
 <div id="qaList" style="display:flex;flex-direction:column;gap:10px"></div>
 <div class="bar"><button type="button" class="ghost" id="addQa">Add Q&amp;A</button></div>
@@ -453,6 +460,96 @@ async function save() {
     msg(e.message);
   }
 }
+
+const INTERVIEW = [
+  "Who are you?",
+  "What do you do?",
+  "Where are you from?",
+  "How did you get started making games?",
+  "What games have you made?",
+  "What are you working on right now?",
+  "What is your favorite game of all time?",
+  "What games are you playing at the moment?",
+  "What is your favorite genre?",
+  "What is your channel about?",
+  "How often do you post videos?",
+  "What was your first video about?",
+  "What is your favorite video you have made?",
+  "What tools do you use to make your games?",
+  "How do you use AI in your work?",
+  "Do you use AI to make your games and videos?",
+  "What programming languages do you know?",
+  "Can you teach me how to make a game?",
+  "What advice would you give a beginner?",
+  "How can I support you?",
+  "What do you offer on Patreon?",
+  "Can I play your games?",
+  "Where can I find your games?",
+  "Can I collaborate with you?",
+  "How can I contact you?",
+  "Do you take commissions or freelance work?",
+  "Do you stream?",
+  "What is your favorite movie or show?",
+  "What kind of music do you like?",
+  "What books do you read?",
+  "Do you play tabletop games?",
+  "Do you collect trading cards?",
+  "What do you do for fun besides games?",
+  "What is your favorite food or drink?",
+  "Are you a morning person or a night owl?",
+  "What is your setup like?",
+  "What is the hardest part of what you do?",
+  "What is the best part of what you do?",
+  "What are your goals for the next year?",
+  "What is something most people do not know about you?",
+  "What is your biggest inspiration?",
+  "Are you really an AI?",
+  "What should I not ask you?",
+  "What would you tell someone who is new to your channel?"
+];
+let iq = { list: [], i: 0, added: 0 };
+
+function interviewShow() {
+  if (iq.i >= iq.list.length) return interviewStop();
+  $("iqProgress").textContent = "Question " + (iq.i + 1) + " of " + iq.list.length;
+  $("iqText").textContent = iq.list[iq.i];
+  $("iqAns").value = "";
+  $("iqAns").focus();
+}
+
+function interviewStart() {
+  const have = new Set(readEditor().qa.map(x => x.q.toLowerCase()));
+  iq = { list: INTERVIEW.filter(q => !have.has(q.toLowerCase())), i: 0, added: 0 };
+  if (!iq.list.length) return msg("You have already answered every interview question.");
+  $("interview").classList.remove("hide");
+  $("interviewBtn").classList.add("hide");
+  msg("");
+  interviewShow();
+}
+
+function interviewStop() {
+  $("interview").classList.add("hide");
+  $("interviewBtn").classList.remove("hide");
+  if (iq.added) {
+    msg("Added " + iq.added + " answer" + (iq.added === 1 ? "" : "s") + ". Saving...");
+    save();
+  } else {
+    msg("No answers added.");
+  }
+}
+
+$("interviewBtn").addEventListener("click", interviewStart);
+$("iqNext").addEventListener("click", () => {
+  const a = $("iqAns").value.trim();
+  if (!a) return msg("Type an answer or press Skip.");
+  addQaRow(iq.list[iq.i], a);
+  iq.added++;
+  iq.i++;
+  msg("");
+  interviewShow();
+});
+$("iqSkip").addEventListener("click", () => { iq.i++; msg(""); interviewShow(); });
+$("iqStop").addEventListener("click", interviewStop);
 
 $("adminBtn").addEventListener("click", openAdmin);
 $("closeBtn1").addEventListener("click", closeAdmin);
