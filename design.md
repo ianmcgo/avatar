@@ -65,3 +65,16 @@ A single `index.html` for GitHub Pages. It shows an avatar of Ian and a chat box
 - The 1B model has a 4096 token context window shared by the instructions, the conversation and the reply. Retrieved context is capped at 2400 characters, only the last six messages of history are sent, and replies are limited to 256 tokens.
 - If a reply fails or comes back empty, the engine's chat state is reset and the question is retried once with only the persona and the question. If that also fails, the avatar answers in simple mode and the status line shows the actual error text, so a failure is never a silent "...".
 - Errors are also written to the browser console.
+
+## AI server (free Cloudflare Worker)
+- `worker.js` is a small Cloudflare Worker that runs a hosted Llama 3.1 8B model through Workers AI, so replies do not depend on the visitor's phone. Cloudflare's free plan includes a daily allowance for Workers AI. When it runs out, requests fail and the page falls back to simple answers.
+- The page sends the conversation to the Worker as `{messages}` and expects `{reply}`. The Worker only accepts requests from `https://ianmcgo.github.io`, keeps at most the last 14 messages, limits message length, and caps replies at 300 tokens. The origin check stops other websites from using it from a browser but does not stop someone calling it directly, so the free daily allowance is the real cost ceiling.
+- The Worker address is stored in `knowledge.json` as `endpoint` and edited in the admin panel under "AI server URL", with a Test server button. `CONFIG.endpoint` in `index.html` overrides it if set. No code edit is needed to connect it.
+- Setup: Cloudflare dashboard, Workers and Pages, Create, Worker, deploy the starter, Edit code, paste `worker.js`, deploy. Then Settings, Bindings, Add, Workers AI, variable name `AI`, and deploy again. Copy the `workers.dev` address into the admin panel.
+- With a server connected the prompt is richer: up to 5 matching Q&A answers, 5 notes, 4 doc chunks, up to 6500 characters of context, 8 recent answers as voice examples, and the last 10 messages of history.
+- If the server errors, the status line shows the error and the avatar answers in simple mode.
+- To use Claude instead of Workers AI, replace the `env.AI.run` call with a request to the Anthropic Messages API using a key stored as a Worker secret. This is pay per use on a separate API account and is not covered by a Claude subscription.
+
+## Phones and smart mode
+- The in-browser model button is hidden on phones, because phone graphics memory often cannot run it ("Object has already been disposed"). After a smart mode failure the page stops retrying the model and uses simple answers or the AI server.
+- The persona now asks for casual, short, human replies without lists or "as an AI" language.

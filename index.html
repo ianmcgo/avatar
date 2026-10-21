@@ -98,6 +98,9 @@ footer a{color:var(--accent)}
 <div class="bar"><button type="button" id="loginBtn">Log in</button><button type="button" class="ghost" id="closeBtn1">Close</button></div>
 </div>
 <div id="editView" class="hide">
+<h3>AI server URL (free Cloudflare Worker, makes replies much more human)</h3>
+<input type="text" id="endpointIn" placeholder="https://ian-avatar.yourname.workers.dev">
+<div class="bar"><button type="button" class="ghost" id="endpointTest">Test server</button></div>
 <h3>Extra personality instructions</h3>
 <textarea id="personaIn" placeholder="How you talk, what you care about, things to never say..."></textarea>
 <h3>Notes about you (separate each with a blank line)</h3>
@@ -144,7 +147,8 @@ const CONFIG = {
   persona: [
     "You are an AI avatar of Ian McGonigal, speaking in first person as Ian.",
     "Ian runs a YouTube channel called Cabal Coffers, builds browser games and webapps, and supports his work on Patreon.",
-    "Keep replies short, friendly and casual.",
+    "Talk like a real person chatting with a friend: casual, relaxed, contractions, short sentences, a little humor. Never sound like a corporate assistant, never use bullet lists unless asked, and never say you are a language model.",
+    "Keep replies to one to three sentences unless asked for more.",
     "If asked something you do not know about Ian, say you are not sure instead of inventing facts.",
     "If asked, admit you are an AI avatar and not the real Ian."
   ].join(" "),
@@ -249,7 +253,7 @@ requestAnimationFrame(faceLoop);
 const history = [];
 let engine = null;
 let mode = "simple";
-let knowledge = { persona_extra: "", notes: [], qa: [], docs: [] };
+let knowledge = { persona_extra: "", notes: [], qa: [], docs: [], endpoint: "" };
 let chunks = [];
 let admin = { token: null, sha: null };
 const TOKEN_KEY = "avatar_admin_token";
@@ -398,16 +402,34 @@ function simpleReply(text) {
 }
 
 function buildMessages(text) {
-  const qa = topMatches(text, knowledge.qa, x => x.q + " " + x.a, 3).map(x => "Q: " + x.q + "\nA: " + x.a);
-  const notes = topMatches(text, knowledge.notes, x => x, 3);
+  const rich = mode === "endpoint";
+  const qa = topMatches(text, knowledge.qa, x => x.q + " " + x.a, rich ? 5 : 3).map(x => "Q: " + x.q + "\nA: " + x.a);
+  const notes = topMatches(text, knowledge.notes, x => x, rich ? 5 : 3);
   let sys = CONFIG.persona;
   if (knowledge.persona_extra) sys += " " + knowledge.persona_extra;
   if (knowledge.docs.length) sys += "\n\nProjects Ian has made: " + knowledge.docs.map(d => d.repo + (d.desc ? " (" + d.desc + ")" : "")).join("; ") + ".";
-  const docs = topChunks(text, 3).map(c => c.repo + " - " + c.title + ": " + plain(c.text, 800));
-  if (qa.length || notes.length || docs.length) sys += "\n\nFacts about Ian to use when relevant:\n" + notes.concat(qa, docs).join("\n\n").slice(0, 2400);
-  let recent = history.slice(-6);
+  const docs = topChunks(text, rich ? 4 : 3).map(c => c.repo + " - " + c.title + ": " + plain(c.text, 800));
+  if (qa.length || notes.length || docs.length) sys += "\n\nFacts about Ian to use when relevant:\n" + notes.concat(qa, docs).join("\n\n").slice(0, rich ? 6500 : 2400);
+  if (rich && knowledge.qa.length) {
+    const seen = new Set(qa);
+    const style = knowledge.qa.slice(-8).map(x => "Q: " + x.q + "\nA: " + x.a).filter(x => !seen.has(x));
+    if (style.length) sys += "\n\nExamples of how Ian really talks. Copy this voice:\n" + style.join("\n\n").slice(0, 2500);
+  }
+  let recent = history.slice(rich ? -10 : -6);
   while (recent.length && recent[0].role !== "user") recent.shift();
   return [{ role: "system", content: sys }].concat(recent);
+}
+
+function endpointUrl() {
+  return CONFIG.endpoint || knowledge.endpoint || "";
+}
+
+function applyMode() {
+  if (endpointUrl()) {
+    mode = "endpoint";
+    smart.style.display = "none";
+    status.textContent = "Online: AI server connected";
+  }
 }
 
 function errText(e) {
@@ -446,11 +468,13 @@ async function localReply(text, bubble) {
     first += "; retry failed: " + errText(e);
   }
   status.textContent = "Smart mode failed: " + first + ". Using simple answers.";
+  engine = null;
+  mode = "simple";
   return simpleReply(text);
 }
 
 async function endpointReply(messages) {
-  const r = await fetch(CONFIG.endpoint, {
+  const r = await fetch(endpointUrl(), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ messages })
@@ -469,7 +493,8 @@ async function loadKnowledge() {
       persona_extra: j.persona_extra || "",
       notes: Array.isArray(j.notes) ? j.notes : [],
       qa: Array.isArray(j.qa) ? j.qa : [],
-      docs: Array.isArray(j.docs) ? j.docs : []
+      docs: Array.isArray(j.docs) ? j.docs : [],
+      endpoint: typeof j.endpoint === "string" ? j.endpoint : ""
     };
     chunks = buildChunks(knowledge.docs);
   } catch (e) {}
@@ -496,15 +521,15 @@ async function init() {
   addMsg(CONFIG.greeting, "bot");
   await loadKnowledge();
   if (loadToken()) { admin.token = loadToken(); status.textContent = "Admin session saved. Click Admin to edit."; }
-  if (CONFIG.endpoint) {
-    mode = "endpoint";
-    status.textContent = "Online";
+  if (endpointUrl()) {
+    applyMode();
     return;
   }
   if (!admin.token) status.textContent = "Simple mode: answers a few topics";
   let hasGpu = false;
   try { hasGpu = !!(navigator.gpu && await navigator.gpu.requestAdapter()); } catch (e) {}
-  if (hasGpu) smart.style.display = "inline-block";
+  const phone = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  if (hasGpu && !phone) smart.style.display = "inline-block";
 }
 
 smart.addEventListener("click", loadModel);
@@ -729,6 +754,7 @@ function addQaRow(q, a, tag, quiet) {
 }
 
 function fillEditor() {
+  $("endpointIn").value = knowledge.endpoint;
   $("personaIn").value = knowledge.persona_extra;
   $("notesIn").value = knowledge.notes.join("\n\n");
   db = knowledge.qa.map(normalize);
@@ -747,6 +773,7 @@ function fillEditor() {
 
 function readEditor() {
   return {
+    endpoint: $("endpointIn").value.trim(),
     docs: docsDb,
     persona_extra: $("personaIn").value.trim(),
     notes: $("notesIn").value.split(/\n\s*\n/).map(x => x.trim()).filter(Boolean),
@@ -942,7 +969,8 @@ async function enterEditor() {
         persona_extra: data.persona_extra || "",
         notes: Array.isArray(data.notes) ? data.notes : [],
         qa: Array.isArray(data.qa) ? data.qa : [],
-        docs: Array.isArray(data.docs) ? data.docs : []
+        docs: Array.isArray(data.docs) ? data.docs : [],
+        endpoint: typeof data.endpoint === "string" ? data.endpoint : ""
       };
       chunks = buildChunks(knowledge.docs);
     } else if (f.status === 404) {
@@ -984,6 +1012,7 @@ async function save() {
     admin.sha = j.content.sha;
     knowledge = data;
     chunks = buildChunks(knowledge.docs);
+    applyMode();
     msg("Saved. Visitors see it after GitHub Pages refreshes, usually within a minute or two.");
   } catch (e) {
     msg(e.message);
@@ -1098,6 +1127,19 @@ $("logoutBtn").addEventListener("click", () => {
   msg("Logged out.");
   status.textContent = "";
 });
+$("endpointTest").addEventListener("click", async () => {
+  const url = $("endpointIn").value.trim();
+  if (!/^https:\/\//.test(url)) return msg("Paste the https address of your Worker first.");
+  msg("Testing...");
+  try {
+    const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: [{ role: "system", content: "Reply in five words or fewer." }, { role: "user", content: "Say hello." }] }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || "status " + r.status);
+    msg("Server works. It said: " + j.reply + " Now press Save to GitHub.");
+  } catch (e) {
+    msg("Server test failed: " + errText(e));
+  }
+});
 $("docHead").addEventListener("click", () => setDocOpen($("docBody").classList.contains("hide")));
 $("syncBtn").addEventListener("click", syncDocs);
 $("dbHead").addEventListener("click", () => setDbOpen($("dbBody").classList.contains("hide")));
@@ -1177,7 +1219,8 @@ $("form").addEventListener("submit", async e => {
     }
   } catch (err) {
     console.error(err);
-    reply = mode === "endpoint" ? "Sorry, something went wrong reaching the server (" + errText(err) + ")." : simpleReply(text);
+    if (mode === "endpoint") status.textContent = "AI server problem (" + errText(err) + "). Using simple answers.";
+    reply = simpleReply(text);
     setBubble(bubble, reply);
   }
   history.push({ role: "assistant", content: reply });
