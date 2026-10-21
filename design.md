@@ -59,3 +59,9 @@ A single `index.html` for GitHub Pages. It shows an avatar of Ian and a chat box
 - Nothing is written until "Save to GitHub" is pressed.
 - On the public page each doc is split into chunks at markdown headings, long sections into pieces of about 1100 characters. Simple mode answers with the best matching chunk when at least two meaningful words match, after the Q&A, built-in answers and notes. Smart mode adds a list of project names and descriptions plus the three best chunks to the model's instructions, so a small model is not overloaded.
 - Q&A answers always win over doc chunks, so a hand-written answer is the way to correct anything the docs get wrong.
+
+## Smart mode safeguards
+- The model library is pinned to a specific version (`@mlc-ai/web-llm@0.2.86`) so a future release cannot break the page.
+- The 1B model has a 4096 token context window shared by the instructions, the conversation and the reply. Retrieved context is capped at 2400 characters, only the last six messages of history are sent, and replies are limited to 256 tokens.
+- If a reply fails or comes back empty, the engine's chat state is reset and the question is retried once with only the persona and the question. If that also fails, the avatar answers in simple mode and the status line shows the actual error text, so a failure is never a silent "...".
+- Errors are also written to the browser console.

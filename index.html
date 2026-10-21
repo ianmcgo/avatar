@@ -404,8 +404,49 @@ function buildMessages(text) {
   if (knowledge.persona_extra) sys += " " + knowledge.persona_extra;
   if (knowledge.docs.length) sys += "\n\nProjects Ian has made: " + knowledge.docs.map(d => d.repo + (d.desc ? " (" + d.desc + ")" : "")).join("; ") + ".";
   const docs = topChunks(text, 3).map(c => c.repo + " - " + c.title + ": " + plain(c.text, 800));
-  if (qa.length || notes.length || docs.length) sys += "\n\nFacts about Ian to use when relevant:\n" + notes.concat(qa, docs).join("\n\n");
-  return [{ role: "system", content: sys }].concat(history);
+  if (qa.length || notes.length || docs.length) sys += "\n\nFacts about Ian to use when relevant:\n" + notes.concat(qa, docs).join("\n\n").slice(0, 2400);
+  let recent = history.slice(-6);
+  while (recent.length && recent[0].role !== "user") recent.shift();
+  return [{ role: "system", content: sys }].concat(recent);
+}
+
+function errText(e) {
+  return String((e && (e.message || e.name)) || e).slice(0, 160);
+}
+
+async function localReply(text, bubble) {
+  async function attempt(msgs) {
+    let out = "";
+    const stream = await engine.chat.completions.create({ messages: msgs, stream: true, temperature: 0.7, max_tokens: 256 });
+    for await (const chunk of stream) {
+      out += chunk.choices[0]?.delta?.content || "";
+      setBubble(bubble, out || "...");
+    }
+    return out;
+  }
+  let first = "";
+  try {
+    const out = await attempt(buildMessages(text));
+    if (out.trim()) return out;
+    first = "empty reply";
+  } catch (e) {
+    console.error(e);
+    first = errText(e);
+  }
+  try {
+    if (engine.resetChat) await engine.resetChat();
+    const out = await attempt([{ role: "system", content: CONFIG.persona }, { role: "user", content: text }]);
+    if (out.trim()) {
+      status.textContent = "Smart mode hit a problem (" + first + ") and retried with a shorter prompt.";
+      return out;
+    }
+    first += "; retry was empty too";
+  } catch (e) {
+    console.error(e);
+    first += "; retry failed: " + errText(e);
+  }
+  status.textContent = "Smart mode failed: " + first + ". Using simple answers.";
+  return simpleReply(text);
 }
 
 async function endpointReply(messages) {
@@ -438,7 +479,7 @@ async function loadModel() {
   smart.disabled = true;
   status.textContent = "Loading AI model (about 700 MB on first visit, then cached)...";
   try {
-    const webllm = await import("https://esm.run/@mlc-ai/web-llm");
+    const webllm = await import("https://esm.run/@mlc-ai/web-llm@0.2.86");
     engine = await webllm.CreateMLCEngine(CONFIG.model, {
       initProgressCallback: p => { status.textContent = p.text; }
     });
@@ -1124,11 +1165,8 @@ $("form").addEventListener("submit", async e => {
   let reply = "";
   try {
     if (mode === "local") {
-      const stream = await engine.chat.completions.create({ messages: buildMessages(text), stream: true, temperature: 0.7, max_tokens: 300 });
-      for await (const chunk of stream) {
-        reply += chunk.choices[0]?.delta?.content || "";
-        setBubble(bubble, reply || "...");
-      }
+      reply = await localReply(text, bubble);
+      setBubble(bubble, reply);
     } else if (mode === "endpoint") {
       reply = await endpointReply(buildMessages(text));
       setBubble(bubble, reply);
@@ -1138,7 +1176,8 @@ $("form").addEventListener("submit", async e => {
       setBubble(bubble, reply);
     }
   } catch (err) {
-    reply = "Sorry, something went wrong.";
+    console.error(err);
+    reply = mode === "endpoint" ? "Sorry, something went wrong reaching the server (" + errText(err) + ")." : simpleReply(text);
     setBubble(bubble, reply);
   }
   history.push({ role: "assistant", content: reply });
