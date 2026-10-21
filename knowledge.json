@@ -93,6 +93,10 @@
     {
       "q": "Where can I find your games?",
       "a": "Go to my website."
+    },
+    {
+      "q": "whats up",
+      "a": "what's up bro."
     }
   ]
 }
