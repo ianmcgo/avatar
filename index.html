@@ -51,6 +51,7 @@ footer a{color:var(--accent)}
 <div id="tools">
 <label><input type="checkbox" id="speak" style="flex:none"> Speak replies</label>
 </div>
+<button type="button" id="smart" style="display:none">Enable smart mode (700 MB download)</button>
 <div id="status"></div>
 </header>
 <div id="log"></div>
@@ -90,7 +91,7 @@ const CONFIG = {
 };
 
 const $ = id => document.getElementById(id);
-const log = $("log"), input = $("input"), send = $("send"), status = $("status"), wrap = $("avatarWrap");
+const smart = $("smart"), log = $("log"), input = $("input"), send = $("send"), status = $("status"), wrap = $("avatarWrap");
 $("name").textContent = CONFIG.name;
 $("foot").innerHTML = "Created by " + CONFIG.name + " · " + CONFIG.links.map(l => `<a href="${l.href}" target="_blank" rel="noopener">${l.label}</a>`).join(" · ");
 
@@ -137,6 +138,23 @@ async function endpointReply(messages) {
   return j.reply;
 }
 
+async function loadModel() {
+  smart.disabled = true;
+  status.textContent = "Loading AI model (about 700 MB on first visit, then cached)...";
+  try {
+    const webllm = await import("https://esm.run/@mlc-ai/web-llm");
+    engine = await webllm.CreateMLCEngine(CONFIG.model, {
+      initProgressCallback: p => { status.textContent = p.text; }
+    });
+    mode = "local";
+    smart.style.display = "none";
+    status.textContent = "Smart mode ready";
+  } catch (e) {
+    smart.disabled = false;
+    status.textContent = "Could not load the AI model, staying in simple mode";
+  }
+}
+
 async function init() {
   addMsg(CONFIG.greeting, "bot");
   if (CONFIG.endpoint) {
@@ -144,24 +162,13 @@ async function init() {
     status.textContent = "Online";
     return;
   }
-  if (!("gpu" in navigator)) {
-    status.textContent = "Simple mode (this browser has no WebGPU for the AI model)";
-    return;
-  }
-  send.disabled = true;
-  status.textContent = "Loading AI model (first visit downloads about 700 MB, then it is cached)...";
-  try {
-    const webllm = await import("https://esm.run/@mlc-ai/web-llm");
-    engine = await webllm.CreateMLCEngine(CONFIG.model, {
-      initProgressCallback: p => { status.textContent = p.text; }
-    });
-    mode = "local";
-    status.textContent = "Ready";
-  } catch (e) {
-    status.textContent = "Could not load the AI model, using simple mode";
-  }
-  send.disabled = false;
+  status.textContent = "Simple mode: answers a few topics";
+  let hasGpu = false;
+  try { hasGpu = !!(navigator.gpu && await navigator.gpu.requestAdapter()); } catch (e) {}
+  if (hasGpu) smart.style.display = "inline-block";
 }
+
+smart.addEventListener("click", loadModel);
 
 $("form").addEventListener("submit", async e => {
   e.preventDefault();
@@ -170,7 +177,6 @@ $("form").addEventListener("submit", async e => {
   input.value = "";
   addMsg(text, "me");
   history.push({ role: "user", content: text });
-  send.disabled = true;
   const bubble = addMsg("...", "bot");
   wrap.classList.add("talking");
   let reply = "";
@@ -197,7 +203,6 @@ $("form").addEventListener("submit", async e => {
   history.push({ role: "assistant", content: reply });
   wrap.classList.remove("talking");
   speak(reply);
-  send.disabled = false;
   input.focus();
 });
 

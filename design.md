@@ -9,8 +9,8 @@ A single `index.html` for GitHub Pages. It shows an avatar of Ian and a chat box
 
 ## How replies work (three modes, picked automatically)
 1. **Endpoint mode**: if `CONFIG.endpoint` is set, messages are POSTed as `{messages}` and the server returns `{reply}`. Use this for a real hosted model (Claude API, OpenAI, or your own fine-tune) behind a Cloudflare Worker or similar. Never put an API key in `index.html`, because anyone can read it.
-2. **Local mode**: if no endpoint and the browser has WebGPU, WebLLM downloads a small open model (about 700 MB, cached afterward) and runs it in the visitor's browser. Free and keyless, but quality is modest and the first load is slow.
-3. **Simple mode**: no WebGPU or load failure. Keyword matching against `CONFIG.facts`.
+2. **Local mode**: if no endpoint and the browser has WebGPU, an "Enable smart mode" button appears. Only when the visitor clicks it, WebLLM downloads a small open model (about 700 MB, cached afterward) and runs it in the visitor's browser. Free and keyless, but quality is modest and the first load is slow.
+3. **Simple mode**: the default. Chat works immediately, before or without the model download, and it is the fallback on no WebGPU or load failure. Keyword matching against `CONFIG.facts`.
 
 ## Making it sound like you
 - Edit `CONFIG.persona`. Write who you are, what you make, how you talk, and what to say when unsure.
