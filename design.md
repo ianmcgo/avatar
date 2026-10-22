@@ -82,3 +82,8 @@ A single `index.html` for GitHub Pages. It shows an avatar of Ian and a chat box
 ## Worker diagnostics
 - The Worker uses the `AI` binding if it exists, otherwise any binding that has a `run` function, so the variable name chosen in the Cloudflare dashboard does not matter.
 - Failures return `{error, detail}`. The detail is the real reason, for example a missing binding or a Cloudflare error code, and the admin Test server button and the status line on the chat page both show it.
+
+## Deploying the Worker from GitHub (no code editing)
+- `wrangler.jsonc` describes the Worker for Cloudflare: its name (`ian-avatar`), its entry file (`worker.js`), and the Workers AI binding named `AI`. Connecting the Worker to this repo in the Cloudflare dashboard (Worker, Settings, Builds, Connect to Git) makes Cloudflare deploy `worker.js` from GitHub on every push, so the code never has to be pasted into the dashboard editor, and the AI binding comes from this file.
+- The Worker name in `wrangler.jsonc` must match the Worker's name in Cloudflare. If the Worker is renamed, change `name` here to match.
+- The files for the website (`index.html` and so on) sit in the same repo and are ignored by the Worker build. GitHub Pages ignores `wrangler.jsonc` and `worker.js`.
